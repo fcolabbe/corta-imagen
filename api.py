@@ -49,6 +49,8 @@ class ImageAnalysisResponse(BaseModel):
     analysis: Optional[Dict[str, Any]] = None
     crop_coordinates: Optional[Dict[str, int]] = None
     output_file: Optional[str] = None
+    download_url: Optional[str] = None
+    view_url: Optional[str] = None
     processing_time: Optional[float] = None
 
 class HealthResponse(BaseModel):
@@ -58,6 +60,17 @@ class HealthResponse(BaseModel):
 
 # Variable global para el procesador
 processor = None
+
+# Configuración de URLs públicas
+BASE_URL = "http://thumbnail.shortenqr.com:8088"
+PUBLIC_OUTPUT_DIR = "/var/www/instagram-cropper/public"
+
+def get_public_urls(filename: str) -> tuple:
+    """Generar URLs públicas para ver y descargar la imagen"""
+    base_url = BASE_URL
+    download_url = f"{base_url}/download/{filename}"
+    view_url = f"{base_url}/view/{filename}"
+    return download_url, view_url
 
 @app.on_event("startup")
 async def startup_event():
@@ -112,12 +125,17 @@ async def analyze_image_from_url(request: ImageAnalysisRequest):
         analysis = getattr(processor, '_last_analysis', {})
         crop_coords = getattr(processor, '_last_crop_coordinates', {})
         
+        # Generar URLs públicas
+        download_url, view_url = get_public_urls(output_file)
+        
         return ImageAnalysisResponse(
             success=True,
             message="Imagen procesada exitosamente",
             analysis=analysis,
             crop_coordinates=crop_coords,
             output_file=output_file,
+            download_url=download_url,
+            view_url=view_url,
             processing_time=round(processing_time, 2)
         )
         
@@ -170,12 +188,17 @@ async def analyze_image_from_file(
         analysis = getattr(processor, '_last_analysis', {})
         crop_coords = getattr(processor, '_last_crop_coordinates', {})
         
+        # Generar URLs públicas
+        download_url, view_url = get_public_urls(output_file)
+        
         return ImageAnalysisResponse(
             success=True,
             message="Imagen procesada exitosamente",
             analysis=analysis,
             crop_coordinates=crop_coords,
             output_file=output_file,
+            download_url=download_url,
+            view_url=view_url,
             processing_time=round(processing_time, 2)
         )
         
@@ -195,6 +218,21 @@ async def download_image(filename: str):
             file_path,
             media_type="image/jpeg",
             filename=filename
+        )
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail="Archivo no encontrado"
+        )
+
+@app.get("/view/{filename}")
+async def view_image(filename: str):
+    """Ver imagen procesada en el navegador"""
+    file_path = filename
+    if os.path.exists(file_path):
+        return FileResponse(
+            file_path,
+            media_type="image/jpeg"
         )
     else:
         raise HTTPException(
